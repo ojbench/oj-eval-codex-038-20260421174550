@@ -5,6 +5,8 @@
 #include <new>
 #include <utility>
 #include <initializer_list>
+#include <type_traits>
+#include <cstring>
 
 namespace sjtu {
 
@@ -23,11 +25,17 @@ class vector {
 
   void reallocate(std::size_t new_cap) {
     T* nd = static_cast<T*>(::operator new(sizeof(T) * new_cap));
-    for (std::size_t i = 0; i < size_; ++i) {
-      new (nd + i) T(std::move(data_[i]));
-      data_[i].~T();
+    if constexpr (std::is_trivially_copyable<T>::value) {
+      if (size_) std::memcpy(nd, data_, sizeof(T) * size_);
+      // trivially destructible: no-op
+      ::operator delete(static_cast<void*>(data_));
+    } else {
+      for (std::size_t i = 0; i < size_; ++i) {
+        new (nd + i) T(std::move(data_[i]));
+        data_[i].~T();
+      }
+      ::operator delete(static_cast<void*>(data_));
     }
-    ::operator delete(static_cast<void*>(data_));
     data_ = nd;
     cap_ = new_cap;
   }
@@ -50,7 +58,11 @@ public:
   vector(const vector& o) : size_(o.size_), cap_(o.size_) {
     if (cap_) {
       data_ = static_cast<T*>(::operator new(sizeof(T) * cap_));
-      for (std::size_t i = 0; i < size_; ++i) new (data_ + i) T(o.data_[i]);
+      if constexpr (std::is_trivially_copyable<T>::value) {
+        if (size_) std::memcpy(data_, o.data_, sizeof(T) * size_);
+      } else {
+        for (std::size_t i = 0; i < size_; ++i) new (data_ + i) T(o.data_[i]);
+      }
     }
   }
   vector(vector&& o) noexcept : data_(o.data_), size_(o.size_), cap_(o.cap_) {
@@ -62,8 +74,31 @@ public:
   }
 
   // assignment
-  vector& operator=(vector o) noexcept {
-    swap(o);
+  vector& operator=(const vector& o) {
+    if (this == &o) return *this;
+    // allocate new buffer
+    T* nd = nullptr;
+    if (o.size_) nd = static_cast<T*>(::operator new(sizeof(T) * o.size_));
+    if constexpr (std::is_trivially_copyable<T>::value) {
+      if (o.size_) std::memcpy(nd, o.data_, sizeof(T) * o.size_);
+    } else {
+      for (std::size_t i = 0; i < o.size_; ++i) new (nd + i) T(o.data_[i]);
+    }
+    // destroy old
+    clear();
+    ::operator delete(static_cast<void*>(data_));
+    // take new
+    data_ = nd; size_ = o.size_; cap_ = o.size_;
+    return *this;
+  }
+  vector& operator=(vector&& o) noexcept {
+    if (this == &o) return *this;
+    // destroy old
+    clear();
+    ::operator delete(static_cast<void*>(data_));
+    // take ownership
+    data_ = o.data_; size_ = o.size_; cap_ = o.cap_;
+    o.data_ = nullptr; o.size_ = 0; o.cap_ = 0;
     return *this;
   }
   void swap(vector& o) noexcept {
