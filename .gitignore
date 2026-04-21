@@ -1,0 +1,17 @@
+### Build artifacts to ignore for OJ
+CMakeFiles/
+CMakeCache.txt
+Makefile
+cmake_install.cmake
+code
+
+### Other common noise
+*.o
+*.obj
+*.exe
+*.out
+*.a
+*.log
+.vscode/
+.idea/
+
