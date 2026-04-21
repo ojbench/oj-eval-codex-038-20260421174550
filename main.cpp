@@ -19,7 +19,7 @@ class vector {
   std::size_t next_cap(std::size_t need) const {
     if (need <= 1) return 1;
     std::size_t n = cap_ ? cap_ : 1;
-    while (n < need) n = n + (n >> 1); // ~1.5x growth
+    while (n < need) n <<= 1; // 2x growth
     return n;
   }
 
@@ -120,12 +120,16 @@ public:
     if (n > size_) {
       for (std::size_t i = size_; i < n; ++i) new (data_ + i) T();
     } else {
-      for (std::size_t i = n; i < size_; ++i) data_[i].~T();
+      if constexpr (!std::is_trivially_destructible<T>::value) {
+        for (std::size_t i = n; i < size_; ++i) data_[i].~T();
+      }
     }
     size_ = n;
   }
   void clear() noexcept {
-    for (std::size_t i = 0; i < size_; ++i) data_[i].~T();
+    if constexpr (!std::is_trivially_destructible<T>::value) {
+      for (std::size_t i = 0; i < size_; ++i) data_[i].~T();
+    }
     size_ = 0;
   }
 
@@ -153,7 +157,9 @@ public:
     return data_[size_++];
   }
   void pop_back() {
-    data_[size_ - 1].~T();
+    if constexpr (!std::is_trivially_destructible<T>::value) {
+      data_[size_ - 1].~T();
+    }
     --size_;
   }
 };
